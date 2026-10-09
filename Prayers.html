@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XML Prayer Viewer</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 30px; 
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .file-input-container {
+            margin-bottom: 25px;
+        }
+        /* Style for the expandable card */
+        details {
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            padding: 10px 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            transition: box-shadow 0.2s ease;
+        }
+        details[open] {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        }
+        /* Style for the clickable header row */
+        summary {
+            font-weight: 600;
+            cursor: pointer;
+            padding: 5px 0;
+            outline: none;
+            user-select: none;
+            color: #2c3e50;
+        }
+        summary:hover {
+            color: #3498db;
+        }
+        /* Style for the inner content container */
+        .content-body {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eeeeee;
+        }
+        /* Right-to-left layout for Arabic text */
+        .arabic { 
+            direction: rtl; 
+            text-align: right; 
+            font-size: 1.4rem; 
+            line-height: 1.8;
+            font-family: 'Traditional Arabic', 'Amiri', 'Segoe UI', Arial, sans-serif;
+        }
+        .meta-info {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="file-input-container">
+        <label style="font-weight:bold; margin-right:10px;" for="xmlFile">Select your XML file:</label>
+        <input type="file" id="xmlFile" accept=".xml">
+    </div>
+    
+    <div id="display-area"></div>
+
+<script>
+document.getElementById('xmlFile').addEventListener('change', function(e) {
+    let file = e.target.files[0];
+    if (!file) return;
+
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        let parser = new DOMParser();
+        let xmlDoc = parser.parseFromString(e.target.result, "text/xml");
+        
+        let prayers = xmlDoc.getElementsByTagName("Prayer");
+        let output = "";
+
+        for (let i = 0; i < prayers.length; i++) {
+            let id = prayers[i].getAttribute("prayerID");
+            let lang = prayers[i].getAttribute("lang");
+            let content = prayers[i].getAttribute("prayerContent");
+            
+            // Apply text formatting classes conditionally
+            let textClass = (lang === "ar") ? "arabic" : "";
+            let displayLang = lang ? lang.toUpperCase() : "UNKNOWN";
+
+            // Generating native accordion elements (<details>)
+            output += `
+                <details>
+                    <summary>Prayer #${id} (${displayLang})</summary>
+                    <div class="content-body">
+                        <div class="meta-info">Language Configuration: ${displayLang} | Element ID: ${id}</div>
+                        <p class="${textClass}">${content}</p>
+                    </div>
+                </details>
+            `;
+        }
+        document.getElementById("display-area").innerHTML = output;
+    };
+    reader.readAsText(file);
+});
+</script>
+
+</body>
+</html>
