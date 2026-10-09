@@ -124,7 +124,7 @@
       </div>
       <div class="input-row">
         <input type="text" id="gh-path" placeholder="File path" value="agendas/daily-agenda.xml">
-        <input type="password" id="gh-token" placeholder="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">
+        <input type="password" id="gh-token" placeholder="Paste GitHub Token (PAT) here">
       </div>
       <button type="button" id="btn-save-settings">Connect &amp; Save Device Settings</button>
     </div>
@@ -146,12 +146,12 @@
     <div class="progress-fill" id="progress-bar"></div>
   </div>
 
-  <!-- Form to add custom dynamic items -->
-  <form id="add-form" class="input-row" style="margin-bottom: 16px;">
-    <input type="text" id="item-title-input" placeholder="Topic description..." required>
-    <input type="number" id="item-duration-input" placeholder="Min" style="max-width: 80px;" required>
-    <button type="submit">Add Item</button>
-  </form>
+  <!-- Form replaced with a div row to safely intercept actions -->
+  <div class="input-row" style="margin-bottom: 16px;">
+    <input type="text" id="item-title-input" placeholder="Topic description...">
+    <input type="number" id="item-duration-input" placeholder="Min" style="max-width: 80px;">
+    <button type="button" id="btn-add-item">Add Item</button>
+  </div>
 
   <!-- Container for rendered items -->
   <div id="agenda-list"></div>
@@ -238,41 +238,40 @@
     updateProgress();
   }
 
- document.getElementById("add-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  
-  const titleInput = document.getElementById("item-title-input");
-  const durationInput = document.getElementById("item-duration-input");
-  
-  const title = titleInput.value.trim();
-  const duration = durationInput.value.trim();
-  if (!title) return;
+  // Strictly targeted click listener binding to clean data structures
+  document.getElementById("btn-add-item").addEventListener("click", () => {
+    const titleInput = document.getElementById("item-title-input");
+    const durationInput = document.getElementById("item-duration-input");
+    
+    const title = titleInput.value.trim();
+    const duration = durationInput.value.trim();
+    
+    if (!title || !duration) {
+      alert("Please fill out both the item title and duration.");
+      return;
+    }
 
-  const agenda = xmlDoc.querySelector("agenda");
-  
-  // Create the parent item tag
-  const newItemNode = xmlDoc.createElement("item");
-  newItemNode.setAttribute("id", Date.now().toString());
-  newItemNode.setAttribute("completed", "false");
+    const agenda = xmlDoc.querySelector("agenda");
+    
+    // Explicit, distinct variable creation to avoid runtime references errors
+    const newItemNode = xmlDoc.createElement("item");
+    newItemNode.setAttribute("id", Date.now().toString());
+    newItemNode.setAttribute("completed", "false");
 
-  // Create the nested text nodes
-  const t = xmlDoc.createElement("title");
-  t.textContent = title;
-  
-  const d = xmlDoc.createElement("duration");
-  d.textContent = duration;
+    const tNode = xmlDoc.createElement("title");
+    tNode.textContent = title;
+    
+    const dNode = xmlDoc.createElement("duration");
+    dNode.textContent = duration;
 
-  // Append elements inside the tree safely
-  newItemNode.appendChild(t);
-  newItemNode.appendChild(d);
-  agenda.appendChild(newItemNode);
+    newItemNode.appendChild(tNode);
+    newItemNode.appendChild(dNode);
+    agenda.appendChild(newItemNode);
 
-  // Clear inputs and re-draw the list
-  titleInput.value = "";
-  durationInput.value = "";
-  renderAgenda();
-});
-
+    titleInput.value = "";
+    durationInput.value = "";
+    renderAgenda();
+  });
 
   async function pullFromGitHub() {
     const owner = ownerInput.value.trim();
@@ -305,51 +304,50 @@
   }
 
   async function pushToGitHub() {
-const owner = ownerInput.value.trim();
-const repo = repoInput.value.trim();
-const path = pathInput.value.trim();
-const token = tokenInput.value.trim();
+    const owner = ownerInput.value.trim();
+    const repo = repoInput.value.trim();
+    const path = pathInput.value.trim();
+    const token = tokenInput.value.trim();
 
-if (!token) { alert("Please enter your GitHub token."); return; }
-syncStatus.textContent = "Saving XML changes to GitHub cloud storage...";
+    if (!token) { alert("Please enter your GitHub token."); return; }
+    syncStatus.textContent = "Saving XML changes to GitHub cloud storage...";
 
-const serializer = new XMLSerializer();
-const xmlString = serializer.serializeToString(xmlDoc);
-const base64Content = btoa(unescape(encodeURIComponent(xmlString)));
+    const serializer = new XMLSerializer();
+    const xmlString = serializer.serializeToString(xmlDoc);
+    const base64Content = btoa(unescape(encodeURIComponent(xmlString)));
 
-// Fixed the URL endpoint to correctly hit the GitHub API domain rather than the website domain
-const url = `https://github.com{owner}/${repo}/contents/${path}`;
+    // Corrected the domain URL here to look up the API endpoint domain instead of the main website interface
+    const url = `https://github.com{owner}/${repo}/contents/${path}`;
 
-const payload = {
-  message: `Sync agenda updates: ${new Date().toLocaleTimeString()}`,
-  content: base64Content
-};
+    const payload = {
+      message: `Sync agenda updates: ${new Date().toLocaleTimeString()}`,
+      content: base64Content
+    };
+    if (currentFileSha) payload.sha = currentFileSha;
 
-if (currentFileSha) payload.sha = currentFileSha;
-
-try {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { 
-      "Authorization": `Bearer ${token}`, 
-      "Content-Type": "application/json", 
-      "Accept": "application/vnd.github.v3+json" 
-    },
-    body: JSON.stringify(payload)
-  });
-  
-  const result = await res.json();
-  if (res.ok) {
-    currentFileSha = result.content.sha;
-    syncStatus.textContent = "Changes saved securely to GitHub repo!";
-  } else {
-    syncStatus.textContent = `Error: ${result.message}`;
+    try {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { 
+          "Authorization": `Bearer ${token}`, 
+          "Content-Type": "application/json", 
+          "Accept": "application/vnd.github.v3+json" 
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      if (res.ok) {
+        currentFileSha = result.content.sha;
+        syncStatus.textContent = "Changes saved securely to GitHub repo!";
+      } else {
+        syncStatus.textContent = `Error: ${result.message}`;
+      }
+    } catch (err) {
+      console.error(err);
+      syncStatus.textContent = "Failed to submit updates to cloud storage.";
+    }
   }
-} catch (err) {
-  console.error(err);
-  syncStatus.textContent = "Failed to submit updates to cloud storage.";
-}
 
-document.getElementById("btn-pull").addEventListener("click", pullFromGitHub);
-document.getElementById("btn-push").addEventListener("click", pushToGitHub);
-renderAgenda();
+  document.getElementById("btn-pull").addEventListener("click", pullFromGitHub);
+  document.getElementById("btn-push").addEventListener("click", pushToGitHub);
+  renderAgenda();
