@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Agenda Sync</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 600px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      padding: 24px;
+    }
+    h2 { margin-top: 0; color: #0f172a; }
+    .config-panel {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .input-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    input[type="text"], input[type="password"], input[type="number"] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      flex: 1;
+      min-width: 140px;
+      outline: none;
+    }
+    button {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    button.btn-secondary { background: #64748b; }
+    button.btn-secondary:hover { background: #475569; }
+    button.btn-danger {
+      background: none;
+      border: none;
+      color: #ef4444;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .progress-bar-container {
+      background: #e2e8f0;
+      border-radius: 8px;
+      height: 12px;
+      overflow: hidden;
+      margin: 12px 0 20px 0;
+    }
+    .progress-fill {
+      background: #10b981;
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .progress-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      color: #334155;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      padding: 10px 4px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-right: 12px;
+      cursor: pointer;
+    }
+    .item-info { flex: 1; }
+    .item-title { font-weight: 500; color: #1e293b; }
+    .item-duration { font-size: 12px; color: #64748b; }
+    .completed .item-title {
+      text-decoration: line-through;
+      color: #94a3b8;
+    }
+    .status-msg {
+      font-size: 13px;
+      margin-top: 8px;
+      color: #0284c7;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Device-Synced Cloud Agenda</h2>
+
+  <!-- Device Configuration -->
+  <details class="config-panel" id="config-dropdown" open>
+    <summary style="cursor: pointer; font-weight: 600; color: #475569;">Configure Device Connection</summary>
+    <div style="margin-top: 12px;">
+      <div class="input-row">
+        <input type="text" id="gh-owner" placeholder="GitHub Username" value="kallassyrabihemile">
+        <input type="text" id="gh-repo" placeholder="Repo Name" value="meeting-agenda">
+      </div>
+      <div class="input-row">
+        <input type="text" id="gh-path" placeholder="File path" value="agendas/daily-agenda.xml">
+        <input type="password" id="gh-token" placeholder="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">
+      </div>
+      <button type="button" id="btn-save-settings">Connect &amp; Save Device Settings</button>
+    </div>
+  </details>
+
+  <!-- Cloud Sync Controls -->
+  <div style="display: flex; gap: 8px; margin: 16px 0;">
+    <button type="button" class="btn-secondary" id="btn-pull">🔄 Pull from Cloud</button>
+    <button type="button" id="btn-push">💾 Save to Cloud</button>
+  </div>
+  <div id="sync-status" class="status-msg"></div>
+
+  <!-- Interactive Progress Bar -->
+  <div class="progress-label-row">
+    <span>Completion Progress</span>
+    <span id="percentage-label">0%</span>
+  </div>
+  <div class="progress-bar-container">
+    <div class="progress-fill" id="progress-bar"></div>
+  </div>
+
+  <!-- Form to add custom dynamic items -->
+  <form id="add-form" class="input-row" style="margin-bottom: 16px;">
+    <input type="text" id="item-title-input" placeholder="Topic description..." required>
+    <input type="number" id="item-duration-input" placeholder="Min" style="max-width: 80px;" required>
+    <button type="submit">Add Item</button>
+  </form>
+
+  <!-- Container for rendered items -->
+  <div id="agenda-list"></div>
+</div>
+
+<script>
+  let currentFileSha = null;
+  let xmlDoc = null;
+
+  const baseXml = `<?xml version="1.0" encoding="UTF-8"?><meeting><agenda></agenda></meeting>`;
+  const parser = new DOMParser();
+  xmlDoc = parser.parseFromString(baseXml, "application/xml");
+
+  const ownerInput = document.getElementById("gh-owner");
+  const repoInput = document.getElementById("gh-repo");
+  const pathInput = document.getElementById("gh-path");
+  const tokenInput = document.getElementById("gh-token");
+  const syncStatus = document.getElementById("sync-status");
+
+  function loadSettings() {
+    ownerInput.value = localStorage.getItem("gh_owner") || "kallassyrabihemile";
+    repoInput.value = localStorage.getItem("gh_repo") || "meeting-agenda";
+    pathInput.value = localStorage.getItem("gh_path") || "agendas/daily-agenda.xml";
+    tokenInput.value = localStorage.getItem("gh_token") || "";
+  }
+  loadSettings();
+
+  document.getElementById("btn-save-settings").addEventListener("click", () => {
+    localStorage.setItem("gh_owner", ownerInput.value.trim());
+    localStorage.setItem("gh_repo", repoInput.value.trim());
+    localStorage.setItem("gh_path", pathInput.value.trim());
+    localStorage.setItem("gh_token", tokenInput.value.trim());
+    syncStatus.textContent = "Device credentials initialized locally!";
+    document.getElementById("config-dropdown").removeAttribute("open");
+  });
+
+  function updateProgress() {
+    const allItems = xmlDoc.querySelectorAll("item");
+    const completedItems = xmlDoc.querySelectorAll('item[completed="true"]');
+    const total = allItems.length;
+    const completed = completedItems.length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    document.getElementById("progress-bar").style.width = percent + "%";
+    document.getElementById("percentage-label").textContent = percent + "%";
+  }
+
+  function renderAgenda() {
+    const list = document.getElementById("agenda-list");
+    list.innerHTML = "";
+    const items = xmlDoc.querySelectorAll("agenda > item");
+
+    items.forEach((itemNode) => {
+      const id = itemNode.getAttribute("id");
+      const isCompleted = itemNode.getAttribute("completed") === "true";
+      const title = itemNode.querySelector("title")?.textContent || "";
+      const duration = itemNode.querySelector("duration")?.textContent || "0";
+
+      const row = document.createElement("div");
+      row.className = `item ${isCompleted ? "completed" : ""}`;
+      row.innerHTML = `
+        <input type="checkbox" id="chk-${id}" ${isCompleted ? "checked" : ""}>
+        <div class="item-info">
+          <label for="chk-${id}" class="item-title">${title}</label>
+          <div class="item-duration">${duration} mins</div>
+        </div>
+        <button type="button" class="btn-danger" data-id="${id}">&times;</button>
+      `;
+
+      row.querySelector('input[type="checkbox"]').addEventListener("change", (e) => {
+        itemNode.setAttribute("completed", e.target.checked ? "true" : "false");
+        row.classList.toggle("completed", e.target.checked);
+        updateProgress();
+      });
+
+      row.querySelector(".btn-danger").addEventListener("click", () => {
+        itemNode.parentNode.removeChild(itemNode);
+        renderAgenda();
+      });
+
+      list.appendChild(row);
+    });
+
+    updateProgress();
+  }
+
+  document.getElementById("add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const title = document.getElementById("item-title-input").value.trim();
+    const duration = document.getElementById("item-duration-input").value.trim();
+    if (!title) return;
+
+    const agenda = xmlDoc.querySelector("agenda");
+    const item = xmlDoc.createElement("item");
+    item.setAttribute("id", Date.now().toString());
+    item.setAttribute("completed", "false");
+
+    const t = xmlDoc.createElement("title");
+    t.textContent = title;
+    const d = xmlDoc.createElement("duration");
+    d.textContent = duration;
+
+    item.appendChild(t);
+    item.appendChild(d);
+    agenda.appendChild(item);
+
+    document.getElementById("item-title-input").value = "";
+    document.getElementById("item-duration-input").value = "";
+    renderAgenda();
+  });
+
+  async function pullFromGitHub() {
+    const owner = ownerInput.value.trim();
+    const repo = repoInput.value.trim();
+    const path = pathInput.value.trim();
+    const token = tokenInput.value.trim();
+
+    if (!token) { alert("Please provide your GitHub token first."); return; }
+    syncStatus.textContent = "Pulling data from GitHub repository...";
+    const url = `https://github.com{owner}/${repo}/contents/${path}`;
+
+    try {
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json" }
+      });
+      if (res.status === 404) {
+        syncStatus.textContent = "No existing cloud agenda file found. Ready to build a new one!";
+        return;
+      }
+      const data = await res.json();
+      currentFileSha = data.sha;
+      const xmlString = decodeURIComponent(escape(atob(data.content)));
+      xmlDoc = parser.parseFromString(xmlString, "application/xml");
+      renderAgenda();
+      syncStatus.textContent = "Data successfully synchronized from GitHub!";
+    } catch (err) {
+      console.error(err);
+      syncStatus.textContent = "Error pulling data from cloud storage.";
+    }
+  }
+
+  async function pushToGitHub() {
+const owner = ownerInput.value.trim();
+const repo = repoInput.value.trim();
+const path = pathInput.value.trim();
+const token = tokenInput.value.trim();
+
+if (!token) { alert("Please enter your GitHub token."); return; }
+syncStatus.textContent = "Saving XML changes to GitHub cloud storage...";
+
+const serializer = new XMLSerializer();
+const xmlString = serializer.serializeToString(xmlDoc);
+const base64Content = btoa(unescape(encodeURIComponent(xmlString)));
+
+// Fixed the URL endpoint to correctly hit the GitHub API domain rather than the website domain
+const url = `https://github.com{owner}/${repo}/contents/${path}`;
+
+const payload = {
+  message: `Sync agenda updates: ${new Date().toLocaleTimeString()}`,
+  content: base64Content
+};
+
+if (currentFileSha) payload.sha = currentFileSha;
+
+try {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { 
+      "Authorization": `Bearer ${token}`, 
+      "Content-Type": "application/json", 
+      "Accept": "application/vnd.github.v3+json" 
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  const result = await res.json();
+  if (res.ok) {
+    currentFileSha = result.content.sha;
+    syncStatus.textContent = "Changes saved securely to GitHub repo!";
+  } else {
+    syncStatus.textContent = `Error: ${result.message}`;
+  }
+} catch (err) {
+  console.error(err);
+  syncStatus.textContent = "Failed to submit updates to cloud storage.";
+}
+
+document.getElementById("btn-pull").addEventListener("click", pullFromGitHub);
+document.getElementById("btn-push").addEventListener("click", pushToGitHub);
+renderAgenda();
