@@ -238,30 +238,41 @@
     updateProgress();
   }
 
-  document.getElementById("add-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const title = document.getElementById("item-title-input").value.trim();
-    const duration = document.getElementById("item-duration-input").value.trim();
-    if (!title) return;
+ document.getElementById("add-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  
+  const titleInput = document.getElementById("item-title-input");
+  const durationInput = document.getElementById("item-duration-input");
+  
+  const title = titleInput.value.trim();
+  const duration = durationInput.value.trim();
+  if (!title) return;
 
-    const agenda = xmlDoc.querySelector("agenda");
-    const item = xmlDoc.createElement("item");
-    item.setAttribute("id", Date.now().toString());
-    item.setAttribute("completed", "false");
+  const agenda = xmlDoc.querySelector("agenda");
+  
+  // Create the parent item tag
+  const newItemNode = xmlDoc.createElement("item");
+  newItemNode.setAttribute("id", Date.now().toString());
+  newItemNode.setAttribute("completed", "false");
 
-    const t = xmlDoc.createElement("title");
-    t.textContent = title;
-    const d = xmlDoc.createElement("duration");
-    d.textContent = duration;
+  // Create the nested text nodes
+  const t = xmlDoc.createElement("title");
+  t.textContent = title;
+  
+  const d = xmlDoc.createElement("duration");
+  d.textContent = duration;
 
-    item.appendChild(t);
-    item.appendChild(d);
-    agenda.appendChild(item);
+  // Append elements inside the tree safely
+  newItemNode.appendChild(t);
+  newItemNode.appendChild(d);
+  agenda.appendChild(newItemNode);
 
-    document.getElementById("item-title-input").value = "";
-    document.getElementById("item-duration-input").value = "";
-    renderAgenda();
-  });
+  // Clear inputs and re-draw the list
+  titleInput.value = "";
+  durationInput.value = "";
+  renderAgenda();
+});
+
 
   async function pullFromGitHub() {
     const owner = ownerInput.value.trim();
